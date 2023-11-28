@@ -2,6 +2,7 @@
 #include <map>
 #include <cmath>
 #include <vector>
+#include <time.h>
 
 #define ScreenWidth 1920
 #define ScreenHeight 1080
@@ -16,6 +17,7 @@ public:
 	time_t delta_time;
 	int numer_of_obstacles = 0;
 	bool game_in_progress = true;
+	bool show_debug = false;
 
 	time_t last_time_obstacle_spawned;
 	GameManager() {
@@ -80,9 +82,9 @@ public:
 		}
 	}
 
-	bool canBeDamaged(clock_t delay)
+	bool canDealDamaged(clock_t current_time, int delay)
 	{
-		return ((1000.0 * (clock() - delay) / CLOCKS_PER_SEC > 10) ? true : false);
+		return (((1000.0 * (current_time-spawn_time) / CLOCKS_PER_SEC) > delay) ? true : false);
 	}
 
 	void heal()
@@ -129,6 +131,7 @@ class Polygon : public Object{
 public:
 	int exp;
 	float rotation_speed = 0.005;
+	bool died = false;
 
 	using Object::Object;
 	Polygon(std::string name, const char* image_path, int maximum_health, int exp_points) : Object(name, image_path) {
@@ -146,16 +149,16 @@ public:
 class Tank : public Object {
 public:
 	const int MAX_LEVEL = 50;
-	int level = 1;
-	int exp = 0;
+	int level;
+	int exp;
 	int exp_for_next_level_up[50] = {0};
-	int upgrade_points = 0;
-	int stats_levels[8] = { 0 };
-	float bullet_speed = 1.0;
-	float bullet_damage = 10;
-	float bullet_penetration = 1.0;
-	int reload_time = 500;
-	float movement_speed = 5.0;
+	int upgrade_points;
+	int stats_levels[8];
+	float bullet_speed;
+	float bullet_damage;
+	float bullet_penetration;
+	int reload_time;
+	float movement_speed;
 	clock_t last_shoot;
 	clock_t dead_time;
 	std::string killed_by = "";
@@ -168,8 +171,38 @@ public:
 		for (int i = 3; i < 50; i++)
 		{
 			exp_for_next_level_up[i] = 0.33*pow(i,3)-4.4*i*i+48.8*i-88;
-			//std::cout << "LEVEL " << i << "\t" << exp_for_next_level_up[i] << "\n";
+			std::cout << "LEVEL " << i << "\t" << exp_for_next_level_up[i] << "\n";
 		}
+		reset_stats();
+	}
+
+	void reset_stats()
+	{
+		level = 1;
+		exp = 0;
+		upgrade_points = 0;
+		for (int i = 0; i < 8; i++) stats_levels[i] = 0;
+		max_health = 1000;
+		health = max_health;
+		health_regen = 20;
+		damage = 25;
+		bullet_speed = 1.0;
+		bullet_damage = 15;
+		bullet_penetration = 1.0;
+		reload_time = 500;
+		movement_speed = 5.0;
+		spawn_time = clock();
+	}
+	void dead_stats()
+	{
+		health = max_health;
+		bullet_speed = 1.0;
+		bullet_damage = 10;
+		bullet_penetration = 1.0;
+		reload_time = 500;
+		movement_speed = 0;
+		position_x = ScreenWidth / 2 + 300;
+		position_y = ScreenHeight / 2;
 	}
 
 	bool canShoot()
@@ -188,10 +221,11 @@ public:
 	}
 	bool levelUp()
 	{
-		if (exp < exp_for_next_level_up[level] && level < MAX_LEVEL)
+		if (exp < exp_for_next_level_up[level] || level >= MAX_LEVEL)
 			return false;
 		level++;
-		upgrade_points++;
+		if(level<MAX_LEVEL)
+			upgrade_points++;
 		return true;
 	}
 	void upgrade()
@@ -208,7 +242,7 @@ public:
 			{
 				upgrade_points--;
 				stats_levels[0]++;
-				health_regen *= 1.2;
+				health_regen *= 1.25;
 			}
 			break;
 		case ALLEGRO_KEY_2:
@@ -216,7 +250,7 @@ public:
 			{
 				upgrade_points--;
 				stats_levels[1]++;
-				max_health *= 1.1;
+				max_health *= 1.25;
 			}
 			break;
 		case ALLEGRO_KEY_3:
@@ -224,7 +258,7 @@ public:
 			{
 				upgrade_points--;
 				stats_levels[2]++;
-				damage *= 1.1;
+				damage *= 2;
 			}
 			break;
 		case ALLEGRO_KEY_4:
@@ -240,7 +274,7 @@ public:
 			{
 				upgrade_points--;
 				stats_levels[4]++;
-				bullet_penetration *= 1.2;
+				bullet_penetration *= 1.5;
 			}
 			break;
 		case ALLEGRO_KEY_6:
@@ -248,7 +282,7 @@ public:
 			{
 				upgrade_points--;
 				stats_levels[5]++;
-				bullet_damage *= 1.2;
+				bullet_damage *= 1.5;
 			}
 			break;
 		case ALLEGRO_KEY_7:
@@ -256,7 +290,7 @@ public:
 			{
 				upgrade_points--;
 				stats_levels[6]++;
-				reload_time *= 0.9;
+				reload_time *= 0.85;
 			}
 			break;
 		case ALLEGRO_KEY_8:
@@ -270,11 +304,6 @@ public:
 		default:
 			break;
 		}
-	}
-
-	void repawn()
-	{
-
 	}
 };
 
@@ -320,6 +349,16 @@ public:
 	{
 		al_draw_scaled_rotated_bitmap(image, offset_x, offset_y, position_x, position_y, 1, 1, rotation, NULL);
 	}
+};
+
+class Restart : public Object
+{
+public:
+	Restart() : Object("Bulet", "images/missing.png")
+	{
+		position_x = ScreenWidth / 2;
+		position_y = ScreenHeight * 0.75;
+	};
 };
 
 class UI {
@@ -379,7 +418,10 @@ public:
 		{
 			const char* labels[] = { "Health Regen", "Max Health", "Body Damage", "Bullet Speed", "Bullet Penetration", "Bullet Damage", "Reload", "Movement Speed" };
 			al_draw_textf(middle_font, white, offset_x, offset_y - height - 2 * thick, ALLEGRO_ALIGN_LEFT, "Tank lvl %d", level);
-			al_draw_textf(middle_font, white, offset_x + 5 * width, offset_y - height - 2 * thick, ALLEGRO_ALIGN_LEFT, "x%d", upgrade_points); //SPRAWDZIC CZY UI SIE NIE NACHODZI
+			if(level!=50)
+				al_draw_textf(middle_font, white, offset_x + 5 * width, offset_y - height - 2 * thick, ALLEGRO_ALIGN_LEFT, "x%d", upgrade_points);
+			else
+				al_draw_text(middle_font, white, offset_x + 5 * width, offset_y - height - 2 * thick, ALLEGRO_ALIGN_LEFT, "MAX");
 			for (int stat = 0; stat < 8; stat++)
 			{
 				al_draw_filled_rounded_rectangle(offset_x, offset_y + stat * (height + 4 * thick), offset_x + 6 * width + 2 * thick, offset_y + stat * (height + 4 * thick) + height, radius, radius, back_color);
