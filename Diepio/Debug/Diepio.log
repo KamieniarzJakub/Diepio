@@ -1,2 +1,12 @@
 ﻿  Diepio.cpp
-  Diepio.vcxproj -> C:\Users\kamie\source\repos\Diepio\Debug\Diepio.exe
+  Enemy.cpp
+  GameManager.cpp
+  Mouse.cpp
+  Object.cpp
+  Polygon.cpp
+  Bullet.cpp
+  Tank.cpp
+  UI.cpp
+  Generating Code...
+  LINK : C:\Users\kamie\Documents\Sieci_komputerowe\Projekt_SieciKomputerowe\Debug\Diepio.exe not found or not built by the last incremental link; performing full link
+  Diepio.vcxproj -> C:\Users\kamie\Documents\Sieci_komputerowe\Projekt_SieciKomputerowe\Debug\Diepio.exe
