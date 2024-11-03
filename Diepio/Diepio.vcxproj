@@ -151,9 +151,27 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Diepio.cpp" />
+    <ClCompile Include="Enemy.cpp" />
+    <ClCompile Include="GameManager.cpp" />
+    <ClCompile Include="Mouse.cpp" />
+    <ClCompile Include="Object.cpp" />
+    <ClCompile Include="Polygon.cpp" />
+    <ClCompile Include="Bullet.cpp" />
+    <ClCompile Include="Tank.cpp" />
+    <ClCompile Include="UI.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Bullet.h" />
+    <ClInclude Include="Enemy.h" />
+    <ClInclude Include="GameManager.h" />
+    <ClInclude Include="Polygon.h" />
+    <ClInclude Include="Tank.h" />
+    <ClInclude Include="Object.h" />
+    <ClInclude Include="Mouse.h" />
+    <ClInclude Include="UI.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1,8 +1,3 @@
-#include <iostream>
-#include <string>
-#include <cmath>
-#include <list>
-#include <chrono>
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_native_dialog.h>
 #include <allegro5/allegro_ttf.h>
@@ -11,7 +6,14 @@
 #include <allegro5/allegro_image.h>
 
 #include "Classes.cpp"
-
+#include "GameManager.h"
+#include "Mouse.h"
+#include "UI.h"
+#include "Object.h"
+#include "Tank.h"
+#include "Enemy.h"
+#include "Polygon.h"
+#include "Bullet.h"
 
 #define ScreenWidth 1920
 #define ScreenHeight 1080
@@ -51,7 +53,6 @@ int main()
 	ALLEGRO_KEYBOARD_STATE keyState;
 	ALLEGRO_MOUSE_STATE mouseState;
 	
-
 	ALLEGRO_COLOR electricBlue = al_map_rgb(44, 117, 255);
 	ALLEGRO_COLOR yellow = al_map_rgb(255, 255, 0);
 	ALLEGRO_COLOR green = al_map_rgb(0, 255, 0);
@@ -61,19 +62,19 @@ int main()
 
 	GameManager gameManager;
 	Mouse mouse;
-	Tank player;
+	Tank player("Player", "images/Tank.png");
+	Enemy enemy(player.getLevel());
 	UI canvas;
-	Restart reset;
+	Object reset("RESTART", "images/RESET.png");
 	
-	//Polygon rectangle("Rectangle", "images/Rectangle.png");
-	//Polygon pentagon("Pentagon", "images/Pentagon.png");
 	std::list<Bullet> bullets;
+	std::list<Bullet> enemy_bullets;
 	std::list<Polygon> polygons;
 
 	ALLEGRO_FONT* font = al_load_font("Orbitron Black.ttf", 36, NULL);
 	al_draw_text(font, al_map_rgb(44, 117, 255), ScreenWidth / 2, ScreenHeight / 2, ALLEGRO_ALIGN_CENTER, "DIEP.IO");
-	//al_flip_display();
-	//al_rest(1.0);
+	al_flip_display();
+	al_rest(1.0);
 	
 	bool quit = false;
 	bool game_in_progress = true;
@@ -94,36 +95,19 @@ int main()
 		al_wait_for_event(event_queue, &events);
 		if (events.type == ALLEGRO_EVENT_MOUSE_AXES)
 		{
-			mouse.position_x = events.mouse.x;
-			mouse.position_y = events.mouse.y;
+			mouse.set_position(events.mouse.x, events.mouse.y);
 		}
 		//game loop
 		if (true)
 		{
-			if (events.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN)
-			{
-				if (events.mouse.button & 1)
-				{
-
-					playerColor = electricBlue;
-				}
-				else if (events.mouse.button & 2)
-				{
-					playerColor = yellow;
-					player.upgrade();
-				}
-			}
 			if (events.type == ALLEGRO_EVENT_KEY_DOWN)
 			{
-				if (player.upgrade_points > 0)
+				if (player.getUpgradePoints())
 					player.upgradeStat(events.keyboard.keycode);
 				switch (events.keyboard.keycode)
 				{
 				case ALLEGRO_KEY_TAB:
-					canvas.STATS_ON = !canvas.STATS_ON;
-					break;
-				case ALLEGRO_KEY_Z:
-					gameManager.show_debug = !gameManager.show_debug;
+					canvas.show_stats();
 					break;
 				case ALLEGRO_KEY_ESCAPE:
 					quit = true;
@@ -136,19 +120,36 @@ int main()
 			{
 				al_get_keyboard_state(&keyState);
 				al_get_mouse_state(&mouseState);
-				if (al_key_down(&keyState, ALLEGRO_KEY_DOWN) || al_key_down(&keyState, ALLEGRO_KEY_S)) player.position_y += player.movement_speed;
-				else if (al_key_down(&keyState, ALLEGRO_KEY_UP) || al_key_down(&keyState, ALLEGRO_KEY_W)) player.position_y -= player.movement_speed;
-				if (al_key_down(&keyState, ALLEGRO_KEY_RIGHT) || al_key_down(&keyState, ALLEGRO_KEY_D)) player.position_x += player.movement_speed;
-				else if (al_key_down(&keyState, ALLEGRO_KEY_LEFT) || al_key_down(&keyState, ALLEGRO_KEY_A)) player.position_x -= player.movement_speed;
+				if ((al_key_down(&keyState, ALLEGRO_KEY_DOWN) || al_key_down(&keyState, ALLEGRO_KEY_S)) && player.get_pos_y() < ScreenHeight)  player.set_pos_y(player.get_pos_y()+player.getMovementSpeed());
+				else if ((al_key_down(&keyState, ALLEGRO_KEY_UP) || al_key_down(&keyState, ALLEGRO_KEY_W)) && player.get_pos_y() > 0) player.set_pos_y(player.get_pos_y() - player.getMovementSpeed());
+				if ((al_key_down(&keyState, ALLEGRO_KEY_RIGHT) || al_key_down(&keyState, ALLEGRO_KEY_D)) && player.get_pos_x() < ScreenWidth) player.set_pos_x(player.get_pos_x() + player.getMovementSpeed());
+				else if ((al_key_down(&keyState, ALLEGRO_KEY_LEFT) || al_key_down(&keyState, ALLEGRO_KEY_A)) && player.get_pos_x()>0) player.set_pos_x(player.get_pos_x()-player.getMovementSpeed());
 				if ((al_mouse_button_down(&mouseState, 1) || al_key_down(&keyState, ALLEGRO_KEY_SPACE)) && player.canShoot())
 				{
-					Bullet bullet(player.bullet_speed, player.bullet_damage, player.bullet_penetration, player.position_x, player.position_y, mouse.position_x, mouse.position_y);
+					Bullet bullet(player, mouse.get_pos_x(), mouse.get_pos_y(), "images/Bullet.png");
 					bullets.push_front(bullet);
+				}
+				//enemy movement
+				if (enemy.isON())
+				{
+					if (enemy.getDistance(player.get_pos_x(), player.get_pos_y()) > 300)
+						enemy.move(player.get_pos_x(), player.get_pos_y());
+					enemy.setRotation(atan2((player.get_pos_y() - enemy.get_pos_y()), (player.get_pos_x() - enemy.get_pos_x())));
+					if (enemy.getDistance(player.get_pos_x(), player.get_pos_y()) < 1000 && enemy.canShoot())
+					{
+						Bullet enemy_bullet(enemy, player.get_pos_x(), player.get_pos_y(), "images/EnemyBullet.png");
+						enemy_bullets.push_front(enemy_bullet);
+					}
 				}
 				for (auto it = bullets.begin(); it != bullets.end(); ++it)
 				{
 					it->move();
 					it->heal();
+				}
+				for (auto it_enemy = enemy_bullets.begin(); it_enemy != enemy_bullets.end(); ++it_enemy)
+				{
+					it_enemy->move();
+					it_enemy->heal();
 				}
 				for (auto it = polygons.begin(); it != polygons.end(); ++it)
 				{
@@ -165,11 +166,11 @@ int main()
 					Polygon hexagon("Hexagon", "images/Hexagon.png", 20000, 200);
 					Polygon octagon("Octagon", "images/Octagon.png", 50000, 500);
 					Polygon decagon("Decagon", "images/Decagon.png", 100000, 1000);
-					if (rand() % 2 + player.level == 45)
+					if (rand() % 2 + player.getLevel() == 45)
 						polygons.push_front(decagon);
-					else if (rand() % 100 + player.level > 100)
+					else if (rand() % 100 + player.getLevel() > 100)
 						polygons.push_front(octagon);
-					else if (rand() % 50 + 2 * player.level > 75)
+					else if (rand() % 50 + 2 * player.getLevel() > 75)
 						polygons.push_front(hexagon);
 					else if (rand() % 50 < 10)
 						polygons.push_front(pentagon);
@@ -181,106 +182,184 @@ int main()
 				auto it_poly = polygons.begin();
 				while (it_poly != polygons.end() && game_in_progress)
 				{
+					//player bullets
 					auto it = bullets.begin();
 					while (it != bullets.end())
 					{
 						if (it_poly->Collision(*it))
 						{
-							if (it_poly->getDamage(it->damage))
+							if (it_poly->tryToKill(it->getBodyDamage()))
 							{
-								it_poly->died = true;
+								it_poly->Kill();
+								it_poly->setKillerName(player.getName());
 								break;
 							}
-							else if (it->getDamage(it_poly->damage))
+							else if (it->tryToKill(it_poly->getBodyDamage()))
 							{
 								it = bullets.erase(it);
 							}
-
 						}
 						if (it != bullets.end()) it++;
 					}
+					//enemy bullets
+					auto it_enemy = enemy_bullets.begin();
+					while (it_enemy != enemy_bullets.end())
+					{
+						if (it_poly->Collision(*it_enemy))
+						{
+							if (it_poly->tryToKill(it_enemy->getBodyDamage()))
+							{
+								it_poly->Kill();
+								break;
+							}
+							else if (it_enemy->tryToKill(it_poly->getBodyDamage()))
+							{
+								it_enemy = enemy_bullets.erase(it_enemy);
+							}
+						}
+						if (it_enemy != enemy_bullets.end()) it_enemy++;
+					}
+					//player collision
 					if (it_poly->Collision(player))
 					{
-						if (it_poly->getDamage(player.damage))
-							it_poly->died = true;
-						else if (it_poly->canDealDamaged(clock(), 1000) && player.getDamage(it_poly->damage))
+						if (it_poly->tryToKill(player.getBodyDamage()))
+							it_poly->Kill();
+						else if (player.tryToKill(it_poly->getBodyDamage()))
 						{
-							player.killed_by = it_poly->name;
-							player.dead_time = clock();
+							player.setKillerName(it_poly->getName());
 							game_in_progress = false;
-							player.dead_stats();
+							player.setDeadStats();
 						}
 					}
-					if (it_poly->died)
+					//enemy collsion
+					if (it_poly->Collision(enemy))
 					{
-						player.exp += it_poly->exp;
+						if (it_poly->tryToKill(enemy.getBodyDamage()))
+							it_poly->Kill();
+						if (it_poly->canDealDamaged(clock(), 1000) && enemy.tryToKill(it_poly->getBodyDamage()))
+						{
+							enemy.setKillerName(it_poly->getName());
+							enemy.reset_stats(player.getLevel());
+						}
+						
+					}
+					if (it_poly->isDead())
+					{
+						if (it_poly->getKillerName() == player.getName())
+							player.setExp(player.getExp() + it_poly->getExp());
 						it_poly = polygons.erase(it_poly);
 						gameManager.numer_of_obstacles--;
 					}
 					if (it_poly != polygons.end()) it_poly++;
 				}
+				//player bullets collision with enemy
+				auto it = bullets.begin();
+				while (it != bullets.end() && game_in_progress)
+				{
+					if (it->Collision(enemy))
+					{
+						if (enemy.tryToKill(it->getBodyDamage()))
+						{
+							enemy.reset_stats(player.getLevel());
+						}
+						else if (it->tryToKill(enemy.getBodyDamage()))
+						{
+							it = bullets.erase(it);
+						}
+					}
+					if (it != bullets.end()) it++;
+				}
+				auto it_enemy = enemy_bullets.begin();
+				while (it_enemy != enemy_bullets.end() && game_in_progress)
+				{
+					if (it_enemy->Collision(player))
+					{
+						if (player.tryToKill(it_enemy->getBodyDamage()))
+						{
+							player.setKillerName(enemy.getName());
+							game_in_progress = false;
+							player.setDeadStats();
+						}
+						else if (it_enemy->tryToKill(player.getBodyDamage()))
+						{
+							it_enemy = enemy_bullets.erase(it_enemy);
+						}
+					}
+					if (it_enemy != enemy_bullets.end()) it_enemy++;
+				}
+				if (player.Collision(enemy))
+				{
+					if (enemy.tryToKill(player.getBodyDamage()))
+					{
+						enemy.reset_stats(player.getLevel());
+					}
+					else if (player.tryToKill(enemy.getBodyDamage()))
+					{
+						player.setKillerName(enemy.getName());
+						game_in_progress = false;
+						player.setDeadStats();
+					}
+				}
 			}
 
-			//al_draw_scaled_rotated_bitmap(player, 75, 50, x, y, 1, 1, theta, NULL);
-			//al_draw_scaled_rotated_bitmap(player.image, 75, 50, player.position_x, player.position_y, 1, 1, player.rotation, NULL);
-
-			//triangle.draw();
-			//rectangle.draw();
-			//pentagon.draw();
-			//al_draw_filled_circle(triangle.position_x, triangle.position_y, std::max(triangle.offset_x, triangle.offset_y), green);
-			//al_draw_filled_circle(rectangle.position_x, rectangle.position_y, std::max(rectangle.offset_x, rectangle.offset_y), green);
-			//al_draw_filled_circle(pentagon.position_x, pentagon.position_y, std::max(pentagon.offset_x, pentagon.offset_y), green);
-			//al_draw_line(triangle.position_x - triangle.health / 2, triangle.position_y + triangle.offset_y + 15, triangle.position_x + triangle.health / 2, triangle.position_y + triangle.offset_y + 15, green, 10);
-			//al_draw_line(rectangle.position_x - rectangle.health / 2, rectangle.position_y + rectangle.offset_y + 15, rectangle.position_x + rectangle.health / 2, rectangle.position_y + rectangle.offset_y + 15, green, 10);
-			//al_draw_line(pentagon.position_x - pentagon.health / 2, pentagon.position_y + pentagon.offset_y + 15, pentagon.position_x + pentagon.health / 2, pentagon.position_y + pentagon.offset_y + 15, green, 10);
-
-			player.rotation = atan2((mouse.position_y - player.position_y), (mouse.position_x - player.position_x));
-			for (auto it = polygons.begin(); it != polygons.end(); ++it)
+			player.setRotation(atan2((mouse.get_pos_y() - player.get_pos_y()), (mouse.get_pos_x() - player.get_pos_x())));
+			for (auto it_poly = polygons.begin(); it_poly != polygons.end(); ++it_poly)
 			{
-				it->draw();
+				it_poly->draw();
 			}
+			for (auto it_enemy = enemy_bullets.begin(); it_enemy != enemy_bullets.end(); ++it_enemy)
+			{
+				it_enemy->draw();
+			}
+			if (enemy_bullets.size() && enemy_bullets.back().getAliveTime() > enemy_bullets.back().getMaxLifespan())
+				enemy_bullets.pop_back();
+			if(enemy.isON())
+				enemy.draw();
 			if (game_in_progress)
 			{
 				if (player.levelUp())
 				{
-					canvas.level_up_show_timer = clock();
+					canvas.start_level_up_timer();
 				}
 				player.heal();
 				canvas.draw_Level_Up();
-				canvas.draw_level(player.exp, player.level, player.exp_for_next_level_up);
-				canvas.draw_stats(player.stats_levels, player.upgrade_points, player.level);
-				al_draw_rectangle(mouse.position_x - 10, mouse.position_y - 10, mouse.position_x + 10, mouse.position_y + 10, playerColor, 2.0);
+				canvas.draw_level(player.getExp(), player.getLevel(), player.getExpForNextLevel());
+				canvas.draw_stats(player.getStatsLevels(), player.getUpgradePoints(), player.getLevel());
+				al_draw_rectangle(mouse.get_pos_x() - 10, mouse.get_pos_y() - 10, mouse.get_pos_x() + 10, mouse.get_pos_y() + 10, playerColor, 2.0);
 				//al_draw_line(player.position_x, player.position_y, mouse.position_x, mouse.position_y, yellow, 3);
 				//al_flip_display();
 			}
-			
-			
+			al_hide_mouse_cursor(display);
 		}
 		if(!game_in_progress)
 		{
 			al_draw_filled_rectangle(0, 0, ScreenWidth, ScreenHeight, al_map_rgba(5, 5, 5, 150));
 			al_draw_text(font, al_map_rgb(255, 255, 255), ScreenWidth / 2, ScreenHeight / 2 - 200, ALLEGRO_ALIGN_CENTER, "You were killed by:");
-			al_draw_text(font, al_map_rgb(255, 255, 255), ScreenWidth / 2, ScreenHeight / 2 - 150, ALLEGRO_ALIGN_CENTER, player.killed_by.c_str());
-			al_draw_textf(font, al_map_rgb(255, 255, 255), ScreenWidth / 2 - 300, ScreenHeight / 2 - 50, ALLEGRO_ALIGN_LEFT, "Score: %d", player.exp);
-			al_draw_textf(font, al_map_rgb(255, 255, 255), ScreenWidth / 2 - 300, ScreenHeight / 2, ALLEGRO_ALIGN_LEFT, "Level: %d", player.level);
-			al_draw_textf(font, al_map_rgb(255, 255, 255), ScreenWidth / 2 - 300, ScreenHeight / 2 + 50, ALLEGRO_ALIGN_LEFT, "Time: %d m %d s", (player.dead_time - player.spawn_time) / CLOCKS_PER_SEC / 60, (player.dead_time - player.spawn_time) / CLOCKS_PER_SEC % 60);
+			al_draw_text(font, al_map_rgb(255, 255, 255), ScreenWidth / 2, ScreenHeight / 2 - 150, ALLEGRO_ALIGN_CENTER, player.getKillerName().c_str());
+			al_draw_textf(font, al_map_rgb(255, 255, 255), ScreenWidth / 2 - 300, ScreenHeight / 2 - 50, ALLEGRO_ALIGN_LEFT, "Score: %d", player.getExp());
+			al_draw_textf(font, al_map_rgb(255, 255, 255), ScreenWidth / 2 - 300, ScreenHeight / 2, ALLEGRO_ALIGN_LEFT, "Level: %d", player.getLevel());
+			al_draw_textf(font, al_map_rgb(255, 255, 255), ScreenWidth / 2 - 300, ScreenHeight / 2 + 50, ALLEGRO_ALIGN_LEFT, "Time: %d m %d s", (player.getDeadTime() - player.getSpawnTime()) / CLOCKS_PER_SEC / 60, (player.getDeadTime() - player.getSpawnTime()) / CLOCKS_PER_SEC % 60);
 			//player.position_x = ScreenWidth / 2 + 400;
 			//player.position_y = ScreenHeight / 2;
 			//al_draw_rectangle(mouse.position_x - 10, mouse.position_y - 10, mouse.position_x + 10, mouse.position_y + 10, playerColor, 2.0);
+			reset.set_pos_x(ScreenWidth / 2);
+			reset.set_pos_y(ScreenHeight * 0.75);
 			reset.draw();
 			auto it = bullets.begin();
 			while (it != bullets.end())
 			{
-				if (it->Collision(reset))
+				if (it->Collision(reset) && reset.tryToKill(it->getBodyDamage()))
 				{
-					if (reset.getDamage(it->damage))
-					{
-						game_in_progress = true;
-						player.reset_stats();
-						polygons.clear();
-						gameManager.numer_of_obstacles = 0;
-						break;
-					}
+					reset.newGame();
+					game_in_progress = true;
+					player.reset_stats();
+					polygons.clear();
+					bullets.clear();
+					enemy_bullets.clear();
+					gameManager.numer_of_obstacles = 0;
+					if(enemy.isON())
+						enemy.reset_stats(player.getLevel());
+					break;
 				}
 				if (it != bullets.end()) it++;
 			}
@@ -292,12 +371,12 @@ int main()
 		{
 			it->draw();
 		}
-		if (bullets.size() && bullets.back().getAliveTime() > bullets.back().alive_time)
+		if (bullets.size() && bullets.back().getAliveTime() > bullets.back().getMaxLifespan())
 			bullets.pop_back();
+			
 
 		player.draw();
-		if (gameManager.show_debug)
-			canvas.debug_stats(player.health, player.health_regen, player.max_health, player.damage, player.bullet_speed, player.bullet_penetration, player.bullet_damage, player.reload_time, player.movement_speed, player.exp, player.level, player.exp_for_next_level_up);
+			
 		al_flip_display();
 		al_clear_to_color(al_map_rgb(205, 205, 205));
 	}
